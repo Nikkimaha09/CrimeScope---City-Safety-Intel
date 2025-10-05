@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CrimeScope - Hot Zone Predictions</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.fullscreen/2.4.0/Control.FullScreen.min.css" />
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f8f9fa;
+        }
+        .navbar {
+            background-color: #2c3e50;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .navbar-brand {
+            color: white !important;
+            font-weight: 600;
+        }
+        .card {
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            border: none;
+        }
+        .card-header {
+            background-color: #2c3e50;
+            color: white;
+            font-weight: 500;
+            border-radius: 10px 10px 0 0 !important;
+        }
+        #map {
+            height: 500px;
+            width: 100%;
+            border-radius: 10px;
+            z-index: 1;
+        }
+        .prediction-card {
+            transition: transform 0.2s;
+        }
+        .prediction-card:hover {
+            transform: translateY(-5px);
+        }
+        .high-risk {
+            border-left: 5px solid #dc3545;
+        }
+        .medium-risk {
+            border-left: 5px solid #ffc107;
+        }
+        .low-risk {
+            border-left: 5px solid #28a745;
+        }
+        .risk-badge {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            font-size: 0.8rem;
+        }
+        .loading-spinner {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 200px;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark mb-4">
+        <div class="container">
+            <a class="navbar-brand" href="/">
+                <i class="fas fa-shield-alt me-2"></i>CrimeScope
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/">Home</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/predictions">Hot Zone Predictions</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span><i class="fas fa-fire me-2"></i>Hot Zone Predictions</span>
+                        <div>
+                            <select id="prediction-method" class="form-select form-select-sm d-inline-block w-auto">
+                                <option value="arima">ARIMA Model</option>
+                                <option value="lstm">LSTM Model</option>
+                            </select>
+                            <select id="prediction-days" class="form-select form-select-sm d-inline-block w-auto ms-2">
+                                <option value="7">Next 7 Days</option>
+                                <option value="14">Next 14 Days</option>
+                                <option value="30">Next 30 Days</option>
+                            </select>
+                            <button id="update-predictions" class="btn btn-sm btn-primary ms-2">
+                                <i class="fas fa-sync-alt me-1"></i> Update
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div id="map"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <i class="fas fa-calendar-alt me-2"></i>Daily Predictions
+                    </div>
+                    <div class="card-body">
+                        <div id="predictions-loading" class="loading-spinner">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                        </div>
+                        <div id="predictions-container" class="row">
+                            <!-- Predictions will be inserted here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 11">
+        <div id="toast-container" class="toast-container"></div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.fullscreen/2.4.0/Control.FullScreen.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .heatmap-legend {
+            padding: 10px;
+            background: white;
+            border-radius: 5px;
+            box-shadow: 0 0 15px rgba(0,0,0,0.2);
+            line-height: 1.2;
+            color: #555;
+        }
+        .heatmap-legend i {
+            width: 18px;
+            height: 18px;
+            float: left;
+            margin-right: 8px;
+            opacity: 0.7;
+        }
+    </style>
+    
+    <!-- Custom JavaScript -->
+    <script>
+        // Global variables
+        let predictionsData = [];
+        let heatmapLayer = null;
+        let crimeMarkers = [];
+        let map; // Global map variable
+
+        // Function to load predictions
+        async function loadPredictions() {
+            const method = document.getElementById('prediction-method').value;
+            const days = document.getElementById('prediction-days').value;
+            
+            const loadingElement = document.getElementById('predictions-loading');
+            const container = document.getElementById('predictions-container');
+            
+            loadingElement.style.display = 'flex';
+            container.innerHTML = '';
+            
+            try {
+                const response = await fetch(`/api/predict/hotzones?method=${method}&days=${days}`);
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    predictionsData = data.data;
+                    renderPredictions();
+                    updateCrimeHeatmap(predictionsData);
+                    
+                    // Fit map bounds to show all predictions
+                    if (predictionsData.length > 0) {
+                        const bounds = L.latLngBounds(
+                            predictionsData.map(p => [p.latitude, p.longitude])
+                        );
+                        map.fitBounds(bounds, { padding: [50, 50] });
+                    }
+                } else {
+                    showToast('Error', data.message || 'Failed to load predictions', 'danger');
+                }
+            } catch (error) {
+                console.error('Error loading predictions:', error);
+                showToast('Error', 'Failed to load predictions', 'danger');
+            } finally {
+                loadingElement.style.display = 'none';
+            }
+        }
+
+        // Function to render predictions as cards
+        function renderPredictions() {
+            const container = document.getElementById('predictions-container');
+            container.innerHTML = '';
+            
+            if (predictionsData.length === 0) {
+                container.innerHTML = '<div class="col-12 text-center py-4">No prediction data available</div>';
+                return;
+            }
+            
+            // Calculate max crimes for scaling
+            const maxCrimes = Math.max(...predictionsData.map(p => p.predicted_crimes));
+            
+            predictionsData.forEach(prediction => {
+                const riskLevel = prediction.is_high_risk ? 'high' : 'medium';
+                const riskClass = `card mb-3 prediction-card ${riskLevel}-risk`;
+                const progress = (prediction.predicted_crimes / maxCrimes) * 100;
+                
+                const card = document.createElement('div');
+                card.className = 'col-md-4 mb-3';
+                card.innerHTML = `
+                    <div class="${riskClass}">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <h5 class="card-title mb-0">${prediction.date}</h5>
+                                <span class="badge bg-${riskLevel === 'high' ? 'danger' : 'warning'} risk-badge">
+                                    ${riskLevel === 'high' ? 'High Risk' : 'Medium Risk'}
+                                </span>
+                            </div>
+                            <p class="text-muted mb-2">Predicted Crimes: <strong>${prediction.predicted_crimes}</strong></p>
+                            <div class="progress" style="height: 10px;">
+                                <div class="progress-bar bg-${riskLevel === 'high' ? 'danger' : 'warning'}" 
+                                     role="progressbar" 
+                                     style="width: ${progress}%" 
+                                     aria-valuenow="${progress}" 
+                                     aria-valuemin="0" 
+                                     aria-valuemax="100">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        // Initialize the map with better defaults and controls
+        function initMap() {
+            // Default to San Francisco coordinates if no geolocation available
+            const defaultLat = 37.7749;
+            const defaultLng = -122.4194;
+            
+            // Initialize map with better options
+            map = L.map('map', {
+                center: [defaultLat, defaultLng],
+                zoom: 12,
+                zoomControl: true,
+                preferCanvas: true,
+                fullscreenControl: true
+            });
+            
+            // Base layers
+            const baseLayers = {
+                'OpenStreetMap': L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+                    maxZoom: 19,
+                    detectRetina: true
+                }),
+                'Satellite': L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                    attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
+                    maxZoom: 19
+                })
+            };
+            
+            // Add default base layer
+            baseLayers['OpenStreetMap'].addTo(map);
+            
+            // Add scale control
+            L.control.scale({imperial: true, metric: true}).addTo(map);
+            
+            // Add layer control
+            map.layerControl = L.control.layers(baseLayers).addTo(map);
+            
+            // Try to get user's location
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        const { latitude, longitude } = position.coords;
+                        map.setView([latitude, longitude], 13);
+                    },
+                    (error) => {
+                        console.warn('Geolocation error:', error);
+                        // Load recent crimes if geolocation fails
+                        loadRecentCrimes();
+                    },
+                    { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+                );
+            } else {
+                // Load recent crimes if geolocation is not supported
+                loadRecentCrimes();
+            }
+        }
+        
+        // Load recent crimes and add to map
+        async function loadRecentCrimes() {
+            try {
+                showToast('Info', 'Loading recent crime data...', 'info');
+                const response = await fetch('/api/crimes');
+                const result = await response.json();
+                
+                if (result.status === 'success' && result.data && result.data.length > 0) {
+                    // Process the crime data
+                    const crimes = result.data.map(crime => ({
+                        ...crime,
+                        // Ensure we have valid coordinates
+                        latitude: parseFloat(crime.latitude) || null,
+                        longitude: parseFloat(crime.longitude) || null,
+                        // Format date if it exists
+                        date: crime.timestamp ? (crime.timestamp.toDate ? crime.timestamp.toDate() : new Date(crime.timestamp)) : null
+                    })).filter(crime => crime.latitude && crime.longitude);
+                    
+                    if (crimes.length > 0) {
+                        updateCrimeHeatmap(crimes);
+                    } else {
+                        showToast('Info', 'No crime locations with valid coordinates found', 'info');
+                    }
+                } else {
+                    showToast('Info', 'No recent crime data available', 'info');
+                }
+            } catch (error) {
+                console.error('Error loading crime data:', error);
+                showToast('Error', 'Failed to load crime data: ' + error.message, 'danger');
+            }
+        }
+        
+        // Update map with crime heatmap and prediction zones
+        function updateCrimeHeatmap(predictions) {
+            if (!map || !predictions || predictions.length === 0) return;
+            
+            try {
+                // Clear existing layers
+                if (window.heatmapLayer) {
+                    map.removeLayer(window.heatmapLayer);
+                }
+                if (window.predictionLayers) {
+                    window.predictionLayers.forEach(layer => map.removeLayer(layer));
+                }
+                
+                // Group predictions by date
+                const predictionsByDate = {};
+                predictions.forEach(prediction => {
+                    const date = prediction.date || 'unknown';
+                    if (!predictionsByDate[date]) {
+                        predictionsByDate[date] = [];
+                    }
+                    predictionsByDate[date].push(prediction);
+                });
+                
+                // Create heatmap data with weighted points based on prediction confidence
+                const heatData = [];
+                const predictionLayers = [];
+                
+                // Color gradient for different prediction days
+                const dateColors = [
+                    '#FF0000', // Red for most recent
+                    '#FF4500', // OrangeRed
+                    '#FF8C00', // DarkOrange
+                    '#FFA500', // Orange
+                    '#FFD700', // Gold
+                    '#FFFF00', // Yellow
+                    '#9ACD32'  // YellowGreen
+                ];
+                
+                // Process each date's predictions
+                Object.entries(predictionsByDate).forEach(([date, datePredictions], dateIndex) => {
+                    const dateLayer = L.layerGroup();
+                    const color = dateColors[dateIndex % dateColors.length];
+                    
+                    datePredictions.forEach(prediction => {
+                        // Add to heatmap data with weight based on confidence
+                        if (prediction.latitude && prediction.longitude) {
+                            const weight = prediction.confidence ? Math.max(0.1, Math.min(1, prediction.confidence / 100)) : 0.5;
+                            heatData.push([prediction.latitude, prediction.longitude, weight]);
+                            
+                            // Add to date-specific layer
+                            const marker = L.circleMarker(
+                                [prediction.latitude, prediction.longitude],
+                                {
+                                    radius: 8,
+                                    fillColor: color,
+                                    color: '#000',
+                                    weight: 1,
+                                    opacity: 1,
+                                    fillOpacity: 0.7
+                                }
+                            ).bindPopup(`
+                                <div style="min-width: 200px;">
+                                    <h6>Predicted Hotspot</h6>
+                                    <div>Date: ${date}</div>
+                                    <div>Risk Score: ${prediction.risk_score || 'N/A'}</div>
+                                    <div>Predicted Crimes: ${prediction.predicted_crimes || 'N/A'}</div>
+                                    <div>Confidence: ${prediction.confidence || 'N/A'}%</div>
+                                </div>
+                            `);
+                            
+                            dateLayer.addLayer(marker);
+                        }
+                    });
+                    
+                    // Add date layer to map and store reference
+                    dateLayer.addTo(map);
+                    predictionLayers.push(dateLayer);
+                    
+                    // Add to layer control if not already added
+                    if (!map.legendControl) {
+                        const legend = L.control({ position: 'bottomleft' });
+                        legend.onAdd = function() {
+                            const div = L.DomUtil.create('div', 'prediction-legend');
+                            div.innerHTML = `
+                                <div style="background: white; padding: 10px; border-radius: 5px; box-shadow: 0 0 15px rgba(0,0,0,0.2);">
+                                    <h6 style="margin: 0 0 5px 0;">Prediction Dates</h6>
+                                    <div style="display: flex; align-items: center; margin: 5px 0;">
+                                        <div style="width: 15px; height: 15px; background: ${color}; margin-right: 5px; border: 1px solid #666;"></div>
+                                        <span>${date}</span>
+                                    </div>
+                                </div>
+                            `;
+                            return div;
+                        };
+                        legend.addTo(map);
+                        map.legendControl = legend;
+                    }
+                });
+                
+                // Store references to layers for cleanup
+                window.predictionLayers = predictionLayers;
+                
+                // Add heatmap layer if we have data
+                if (heatData.length > 0 && typeof L.heatLayer === 'function') {
+                    window.heatmapLayer = L.heatLayer(heatData, {
+                        radius: 25,
+                        blur: 15,
+                        maxZoom: 17,
+                        max: 10,
+                        gradient: {
+                            0.1: 'blue',    // Low intensity
+                            0.3: 'cyan',    // Medium-Low
+                            0.5: 'lime',    // Medium intensity
+                            0.7: 'yellow',  // Medium-High
+                            1.0: 'red'      // High intensity
+                        }
+                    }).addTo(map);
+                    
+                    // Add heatmap legend
+                    const legend = L.control({ position: 'bottomright' });
+                    legend.onAdd = function() {
+                        const div = L.DomUtil.create('div', 'heatmap-legend');
+                        div.innerHTML = `
+                            <div style="background: white; padding: 10px; border-radius: 5px; box-shadow: 0 0 15px rgba(0,0,0,0.2);">
+                                <h6 style="margin: 0 0 5px 0;">Crime Density</h6>
+                                <div style="display: flex; align-items: center; margin: 3px 0;">
+                                    <div style="width: 15px; height: 15px; background: blue; margin-right: 5px; border: 1px solid #666;"></div>
+                                    <span>Low</span>
+                                </div>
+                                <div style="display: flex; align-items: center; margin: 3px 0;">
+                                    <div style="width: 15px; height: 15px; background: cyan; margin-right: 5px; border: 1px solid #666;"></div>
+                                    <span>Medium-Low</span>
+                                </div>
+                                <div style="display: flex; align-items: center; margin: 3px 0;">
+                                    <div style="width: 15px; height: 15px; background: lime; margin-right: 5px; border: 1px solid #666;"></div>
+                                    <span>Medium</span>
+                                </div>
+                                <div style="display: flex; align-items: center; margin: 3px 0;">
+                                    <div style="width: 15px; height: 15px; background: yellow; margin-right: 5px; border: 1px solid #666;"></div>
+                                    <span>Medium-High</span>
+                                </div>
+                                <div style="display: flex; align-items: center; margin: 3px 0;">
+                                    <div style="width: 15px; height: 15px; background: red; margin-right: 5px; border: 1px solid #666;"></div>
+                                    <span>High</span>
+                                </div>
+                            </div>
+                        `;
+                        return div;
+                    };
+                    legend.addTo(map);
+                } else if (heatData.length === 0) {
+                    console.warn('No heatmap data available');
+                } else {
+                    console.error('Heatmap plugin not available');
+                    showToast('Warning', 'Heatmap visualization not available. Showing markers only.', 'warning');
+                }
+                
+                // Add circle markers for each crime
+                const crimeMarkers = [];
+                // Use predictions data to create crime markers
+                if (predictions && predictions.length > 0) {
+                    predictions.forEach(prediction => {
+                        if (!prediction.latitude || !prediction.longitude) return;
+                        
+                        const marker = L.circleMarker(
+                            [prediction.latitude, prediction.longitude],
+                            getMarkerStyle(prediction)
+                        ).bindPopup(createPopupContent(prediction));
+                        
+                        marker.on('click', function() {
+                            map.setView([prediction.latitude, prediction.longitude], 16);
+                        });
+                        
+                        crimeMarkers.push(marker);
+                        marker.addTo(map);
+                    });
+                    
+                    // Fit map to show all points with padding if we have markers
+                    if (crimeMarkers.length > 0) {
+                        const bounds = L.latLngBounds(crimeMarkers.map(marker => marker.getLatLng()));
+                        map.fitBounds(bounds, { padding: [50, 50] });
+                    }
+                }
+                
+                // Add overlays to layer control
+                if (map.layerControl) {
+                    // Remove existing overlay layers
+                    Object.values(map._layers).forEach(layer => {
+                        if (layer instanceof L.LayerGroup && layer !== window.heatmapLayer) {
+                            map.removeLayer(layer);
+                        }
+                    });
+                    
+                    // Create a layer group for crime markers
+                    const crimeLayerGroup = L.layerGroup(crimeMarkers);
+                    crimeLayerGroup.addTo(map);
+                    
+                    // Update layer control
+                    const overlays = {};
+                    
+                    if (window.heatmapLayer) {
+                        window.heatmapLayer.addTo(map);
+                        overlays["Crime Heatmap"] = window.heatmapLayer;
+                    }
+                    
+                    overlays["Crime Locations"] = crimeLayerGroup;
+                    
+                    // Update layer control with new overlays
+                    map.layerControl.addOverlay(crimeLayerGroup, "Crime Locations");
+                    
+                    // Store references
+                    window.crimeLayerGroup = crimeLayerGroup;
+                }
+                
+                showToast('Success', `Displaying ${crimeMarkers.length} crime locations`, 'success');
+                
+            } catch (error) {
+                console.error('Error updating crime heatmap:', error);
+                showToast('Error', 'Failed to update crime map: ' + error.message, 'danger');
+            }
+        }
+        
+        // Helper function to get marker style based on crime data
+        function getMarkerStyle(crime) {
+            // Default style
+            const style = {
+                radius: 6,
+                fillColor: '#ff0000',
+                color: '#fff',
+                weight: 1,
+                opacity: 1,
+                fillOpacity: 0.8
+            };
+            
+            // Customize based on crime type or severity if available
+            if (crime && crime.type) {
+                const type = crime.type.toLowerCase();
+                if (type.includes('theft') || type.includes('burglary')) {
+                    style.fillColor = '#ff7800';  // Orange for theft
+                } else if (type.includes('assault') || type.includes('violence')) {
+                    style.fillColor = '#ff0000';  // Red for violence
+                } else if (type.includes('vandalism') || type.includes('damage')) {
+                    style.fillColor = '#ffcc00';  // Yellow for vandalism
+                } else if (type.includes('drug') || type.includes('narcotic')) {
+                    style.fillColor = '#800080';  // Purple for drug-related
+                }
+            }
+            
+            return style;
+        }
+        
+        // Helper function to create popup content
+        function createPopupContent(crime) {
+            let content = '<div style="min-width: 200px; max-width: 300px;">';
+            
+            // Crime type
+            if (crime.type) {
+                content += `<h6 class="mb-2"><strong>${crime.type}</strong></h6>`;
+            } else {
+                content += '<h6 class="mb-2"><strong>Reported Crime</strong></h6>';
+            }
+            
+            // Date and time
+            if (crime.date) {
+                const date = new Date(crime.date);
+                content += `<p class="mb-1"><i class="fas fa-calendar-alt me-2"></i>${date.toLocaleDateString()}</p>`;
+                content += `<p class="mb-1"><i class="fas fa-clock me-2"></i>${date.toLocaleTimeString()}</p>`;
+            }
+            
+            // Location
+            if (crime.address) {
+                content += `<p class="mb-1"><i class="fas fa-map-marker-alt me-2"></i>${crime.address}</p>`;
+            }
+            
+            // Description
+            if (crime.description) {
+                content += `<div class="mt-2"><i class="fas fa-info-circle me-2"></i>${crime.description}</div>`;
+            }
+            
+            content += '</div>';
+            return content;
+        }
+
+        // Function to show toast notifications
+        function showToast(title, message, type = 'info') {
+            const toastContainer = document.getElementById('toast-container');
+            const toastId = 'toast-' + Date.now();
+            
+            const toastHTML = `
+                <div id="${toastId}" class="toast" role="alert" aria-live="assertive" aria-atomic="true" data-bs-delay="3000">
+                    <div class="toast-header bg-${type} text-white">
+                        <strong class="me-auto">${title}</strong>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast" aria-label="Close"></button>
+                    </div>
+                    <div class="toast-body">
+                        ${message}
+                    </div>
+                </div>
+            `;
+            
+            toastContainer.insertAdjacentHTML('beforeend', toastHTML);
+            const toastElement = document.getElementById(toastId);
+            const toast = new bootstrap.Toast(toastElement);
+            toast.show();
+            
+            // Remove toast after it's hidden
+            toastElement.addEventListener('hidden.bs.toast', () => {
+                toastElement.remove();
+            });
+        }
+
+        // Event Listeners
+        document.getElementById('update-predictions').addEventListener('click', loadPredictions);
+
+        // Initialize map and load initial predictions
+        initMap();
+        loadPredictions();
+    </script>
+</body>
+</html>

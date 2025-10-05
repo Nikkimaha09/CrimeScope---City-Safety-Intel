@@ -1,0 +1,1069 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CrimeScope - Alerts</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" 
+          href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tF/miZyoHS5obTRR9BMY="
+          crossorigin=""
+          onerror="console.error('Failed to load Leaflet CSS');
+                 document.documentElement.classList.add('leaflet-css-load-error')">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        // Check if Leaflet is loaded
+        function checkLeafletLoaded() {
+            if (typeof L === 'undefined') {
+                console.error('Leaflet not loaded!');
+                document.getElementById('map').innerHTML = 
+                    '<div class="alert alert-danger">Error: Map library failed to load. Please refresh the page or check your internet connection.</div>';
+                return false;
+            }
+            console.log('Leaflet loaded successfully');
+            return true;
+        }
+        
+        // Check when DOM is loaded
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOM loaded, checking dependencies...');
+            if (!checkLeafletLoaded()) {
+                // Try loading Leaflet dynamically if not loaded
+                console.log('Attempting to load Leaflet...');
+                const script = document.createElement('script');
+                script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+                script.integrity = 'sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=';
+                script.crossOrigin = '';
+                script.onload = function() {
+                    console.log('Leaflet loaded dynamically');
+                    checkLeafletLoaded();
+                };
+                script.onerror = function() {
+                    console.error('Failed to load Leaflet dynamically');
+                };
+                document.head.appendChild(script);
+            }
+        });
+    </script>
+    <style>
+        #map { 
+            height: 400px; 
+            width: 100%;
+            min-height: 300px;
+            margin-bottom: 20px; 
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            background-color: #f0f0f0;
+            border: 1px solid #ddd;
+        }
+        
+        /* Ensure map container is visible during initialization */
+        #map.loading {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: #666;
+            font-size: 1.2em;
+        }
+        .alert-card { 
+            margin-bottom: 15px;
+            transition: transform 0.2s;
+        }
+        .alert-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .toast { 
+            position: fixed; 
+            top: 20px; 
+            right: 20px; 
+            z-index: 1000;
+        }
+        #alerts-container {
+            max-height: 60vh;
+            overflow-y: auto;
+            padding-right: 10px;
+        }
+        .alert-marker {
+            background: transparent;
+            border: none;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
+        <div class="container">
+            <a class="navbar-brand" href="/">CrimeScope</a>
+            <div class="navbar-nav">
+                <a class="nav-link" href="/">Home</a>
+                <a class="nav-link" href="/predictions">Predictions</a>
+                <a class="nav-link active" href="/alerts">Alerts</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="row">
+            <div class="col-md-8">
+                <div id="map" class="loading">
+                    <div class="text-center py-5">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading map...</span>
+                        </div>
+                        <p class="mt-2">Initializing map...</p>
+                    </div>
+                </div>
+                <div id="alerts-container">
+                    <div class="text-center py-5" id="loading">
+                        <div class="spinner-border" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-header">Report Alert</div>
+                    <div class="card-body">
+                        <form id="reportForm">
+                            <div class="mb-3">
+                                <label class="form-label">Title</label>
+                                <input type="text" class="form-control" id="title" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Description</label>
+                                <textarea class="form-control" id="description" rows="3" required></textarea>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Severity</label>
+                                <select class="form-select" id="severity">
+                                    <option value="low">Low</option>
+                                    <option value="medium" selected>Medium</option>
+                                    <option value="high">High</option>
+                                </select>
+                            </div>
+                            <button type="submit" class="btn btn-primary w-100">
+                                <span class="spinner-border spinner-border-sm d-none" id="spinner"></span>
+                                Report Alert
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS Bundle with Popper -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+            integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+            crossorigin=""
+            onerror="console.error('Failed to load Leaflet JS')"></script>
+    
+    <!-- Load alerts.js -->
+    <script src="{{ url_for('static', filename='js/alerts.js') }}"></script>
+    
+    <!-- Initialize the app -->
+    <script>
+        // This script will be executed after alerts.js is loaded
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('App initialized');
+        });
+
+        // Verify map is properly initialized
+        function verifyMapInitialization() {
+            console.log('Verifying map initialization...');
+            
+            // Check if Leaflet is loaded
+            if (typeof L === 'undefined') {
+                console.error('Leaflet is not loaded!');
+                showToast('Error: Map library not loaded. Please refresh the page.', 'danger');
+                return false;
+            }
+            
+            // Check if map container exists
+            const mapContainer = document.getElementById('map');
+            if (!mapContainer) {
+                console.error('Map container not found!');
+                return false;
+            }
+            
+            // Check if map container is visible
+            const style = window.getComputedStyle(mapContainer);
+            if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') {
+                console.warn('Map container is not visible');
+            }
+            
+            // Check map dimensions
+            if (mapContainer.offsetWidth === 0 || mapContainer.offsetHeight === 0) {
+                console.warn('Map container has zero dimensions');
+            }
+            
+            return true;
+        }
+
+        // Initialize the page
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOM fully loaded, starting initialization...');
+            
+            // Show loading state
+            const loadingEl = document.getElementById('loading');
+            if (loadingEl) {
+                console.log('Showing loading indicator');
+                loadingEl.classList.remove('d-none');
+            } else {
+                console.error('Loading element not found');
+            }
+            
+            // 1. First, verify map container is ready
+            const mapContainer = document.getElementById('map');
+            if (!mapContainer) {
+                const errorMsg = 'Map container not found in DOM';
+                console.error(errorMsg);
+                showToast('Error: ' + errorMsg, 'danger');
+                if (loadingEl) loadingEl.classList.add('d-none');
+                return;
+            }
+            console.log('Map container found, dimensions:', 
+                'width:', mapContainer.offsetWidth, 
+                'height:', mapContainer.offsetHeight);
+            
+            // 2. Initialize the map
+            console.log('Initializing map...');
+            if (!initMap()) {
+                console.error('Failed to initialize map');
+                showToast('Error initializing map', 'danger');
+                return;
+            }
+            
+            // 3. Set up form submission handler
+            console.log('Setting up form...');
+            const reportForm = document.getElementById('reportForm');
+            if (reportForm) {
+                reportForm.addEventListener('submit', handleFormSubmit);
+                console.log('Form submission handler attached');
+            } else {
+                console.warn('Report form not found');
+            }
+            
+            // 4. Get user location and load alerts
+            console.log('Getting user location...');
+            getLocation()
+                .then(() => {
+                    console.log('Location obtained, loading alerts...');
+                    return loadAlerts();
+                })
+                .catch((error) => {
+                    console.warn('Error getting location, loading alerts anyway:', error);
+                    return loadAlerts();
+                })
+                .finally(() => {
+                    if (loadingEl) loadingEl.classList.add('d-none');
+                    console.log('Initialization complete');
+                });
+        });
+        
+        function getLocation() {
+            return new Promise((resolve, reject) => {
+                console.log('Attempting to get user location...');
+                
+                // Check if geolocation is available
+                if (!navigator.geolocation) {
+                    console.warn('Geolocation is not supported by this browser');
+                    const defaultPos = { lat: 17.3850, lng: 78.4867 };
+                    userLocation = defaultPos;
+                    
+                    if (map) {
+                        map.setView([defaultPos.lat, defaultPos.lng], 13);
+                    }
+                    
+                    resolve(defaultPos);
+                    return;
+                }
+                
+                // Set a timeout for the geolocation request
+                const geoOptions = {
+                    enableHighAccuracy: true,
+                    timeout: 10000,  // 10 seconds
+                    maximumAge: 0     // Force fresh location
+                };
+                
+                navigator.geolocation.getCurrentPosition(
+                    position => {
+                        console.log('Got user location:', position.coords);
+                        
+                        const userPos = {
+                            lat: position.coords.latitude,
+                            lng: position.coords.longitude,
+                            accuracy: position.coords.accuracy
+                        };
+                        
+                        userLocation = userPos;
+                        
+                        if (map) {
+                            // Center map on user's location with appropriate zoom
+                            map.setView([userPos.lat, userPos.lng], 15);
+                            
+                            // Update or create user location marker
+                            updateUserLocationMarker(userPos);
+                            
+                            // Add accuracy circle if accuracy is available
+                            if (userPos.accuracy) {
+                                if (accuracyCircle) {
+                                    map.removeLayer(accuracyCircle);
+                                }
+                                accuracyCircle = L.circle(
+                                    [userPos.lat, userPos.lng],
+                                    { radius: userPos.accuracy }
+                                ).addTo(map);
+                            }
+                        }
+                        
+                        resolve(userPos);
+                    },
+                    error => {
+                        console.error("Error getting user location:", error);
+                        const errorMessage = getGeolocationError(error);
+                        console.warn(errorMessage);
+                        
+                        showToast("Could not get your location. Using default location.", "warning");
+                        
+                        // Set default location (Hyderabad)
+                        const defaultPos = { lat: 17.3850, lng: 78.4867 };
+                        userLocation = defaultPos;
+                        
+                        if (map) {
+                            map.setView([defaultPos.lat, defaultPos.lng], 13);
+                        }
+                        
+                        resolve(defaultPos);
+                    },
+                    geoOptions
+                );
+            });
+            
+            // Helper function to get user-friendly error messages
+            function getGeolocationError(error) {
+                switch(error.code) {
+                    case error.PERMISSION_DENIED:
+                        return "User denied the request for geolocation.";
+                    case error.POSITION_UNAVAILABLE:
+                        return "Location information is unavailable.";
+                    case error.TIMEOUT:
+                        return "The request to get user location timed out.";
+                    default:
+                        return "An unknown error occurred while getting location.";
+                }
+            }
+        }
+        
+        function updateUserLocationMarker(position) {
+            if (userMarker) {
+                map.removeLayer(userMarker);
+            }
+            
+            userMarker = L.marker([position.lat, position.lng], {
+                icon: L.divIcon({
+                    className: 'user-location-marker',
+                    html: '<i class="fas fa-user" style="color: #3498db; font-size: 24px;"></i>',
+                    iconSize: [24, 24],
+                    iconAnchor: [12, 12]
+                }),
+                zIndexOffset: 1000
+            }).addTo(map);
+        }
+        
+        function initMap() {
+            console.log('Initializing map...');
+            
+            // Verify map container exists and is visible
+            const mapContainer = document.getElementById('map');
+            if (!mapContainer) {
+                const errorMsg = 'Map container not found!';
+                console.error(errorMsg);
+                showToast('Error: ' + errorMsg, 'danger');
+                return false;
+            }
+            
+            // Check if Leaflet is loaded
+            if (typeof L === 'undefined') {
+                const errorMsg = 'Leaflet library not loaded!';
+                console.error(errorMsg);
+                showToast('Error: ' + errorMsg, 'danger');
+                return false;
+            }
+            
+            console.log('Leaflet version:', L.version);
+            console.log('Map container dimensions:', {
+                width: mapContainer.offsetWidth,
+                height: mapContainer.offsetHeight,
+                display: window.getComputedStyle(mapContainer).display,
+                visibility: window.getComputedStyle(mapContainer).visibility
+            });
+            
+            try {
+                // Check if map is already initialized
+                if (map) {
+                    console.log('Map already initialized, removing old instance');
+                    map.remove();
+                }
+                
+                // Initialize map with a default view
+                map = L.map('map', {
+                    center: [17.3850, 78.4867],
+                    zoom: 13,
+                    tap: true,  // Enable tap support for mobile
+                    tapTolerance: 15  // Increase tap tolerance for better touch response
+                });
+                
+                console.log('Map instance created:', map);
+                
+                // Add the OpenStreetMap tile layer
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+                    tap: true
+                }).addTo(map);
+                
+                // Add scale control
+                L.control.scale().addTo(map);
+                
+                // Add a simple marker to verify map is working
+                L.marker([17.3850, 78.4867]).addTo(map)
+                    .bindPopup('Default location')
+                    .openPopup();
+                
+                // Add event handlers
+                map.on('click', function(e) {
+                    updateSelectedLocation(e.latlng);
+                });
+                
+                // Handle touch events for mobile devices
+                map.on('touchstart', function(e) {
+                    // Prevent default to avoid any default touch behavior
+                    if (e.originalEvent && e.originalEvent.touches) {
+                        e.originalEvent.preventDefault();
+                    }
+                });
+                
+                map.on('touchend', function(e) {
+                    if (e.originalEvent && e.originalEvent.changedTouches) {
+                        const touch = e.originalEvent.changedTouches[0];
+                        const point = map.mouseEventToContainerPoint(touch);
+                        const latlng = map.containerPointToLatLng(point);
+                        updateSelectedLocation(latlng);
+                    }
+                });
+                
+                console.log('Map initialized successfully');
+                return true;
+            } catch (error) {
+                console.error('Error initializing map:', error);
+                showToast('Error initializing map. Please check console for details.', 'danger');
+                return false;
+            }
+        }
+        
+        function updateSelectedLocation(latlng) {
+            // Remove existing marker if any
+            if (userMarker) {
+                map.removeLayer(userMarker);
+            }
+            
+            // Add new marker at clicked location
+            userMarker = L.marker([latlng.lat, latlng.lng], {
+                icon: L.divIcon({
+                    className: 'user-location-marker',
+                    html: '<i class="fas fa-map-marker-alt" style="color: #e74c3c; font-size: 32px;"></i>',
+                    iconSize: [32, 32],
+                    iconAnchor: [16, 32]
+                }),
+                zIndexOffset: 1000  // Ensure it's above other markers
+            }).addTo(map);
+            
+            // Update user location
+            userLocation = { 
+                lat: latlng.lat, 
+                lng: latlng.lng 
+            };
+            
+            // Show feedback
+            showToast('Location selected!', 'success');
+        }
+
+        // Load alerts from API
+        async function loadAlerts() {
+            console.log('loadAlerts() called');
+            const loadingEl = document.getElementById('loading');
+            const alertsContainer = document.getElementById('alerts-container');
+            
+            console.log('Loading element:', loadingEl);
+            console.log('Alerts container element:', alertsContainer);
+            
+            if (!alertsContainer) {
+                const errorMsg = 'Alerts container not found in the DOM';
+                console.error(errorMsg);
+                showToast(errorMsg, 'danger');
+                return;
+            }
+            
+            // Show loading state
+            alertsContainer.innerHTML = `
+                <div class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading alerts...</span>
+                    </div>
+                    <p class="mt-2">Loading alerts...</p>
+                </div>`;
+                
+            let response;
+            let apiUrl;
+            
+            try {
+                console.log('Starting to load alerts...');
+                if (loadingEl) loadingEl.classList.remove('d-none');
+                if (alertsContainer) alertsContainer.innerHTML = '';
+                
+                // Clear existing alerts and markers
+                alerts.length = 0;
+                if (markers && map) {
+                    markers.forEach(marker => map.removeLayer(marker));
+                    markers.length = 0;
+                }
+                
+                // Build the appropriate URL based on whether we have user location
+                apiUrl = '/api/alerts';
+                if (userLocation && userLocation.lat && userLocation.lng) {
+                    apiUrl = `/api/alerts/nearby?lat=${userLocation.lat}&lng=${userLocation.lng}&radius=5&limit=20`;
+                }
+                console.log(`Fetching alerts from: ${apiUrl}`);
+                
+                // Make the API request
+                try {
+                    console.log('Making fetch request to:', apiUrl);
+                    response = await fetch(apiUrl);
+                    console.log('Received response with status:', response.status);
+                    
+                    if (!response.ok) {
+                        let errorData = {};
+                        try {
+                            const text = await response.text();
+                            console.log('Raw error response:', text);
+                            try {
+                                errorData = JSON.parse(text);
+                            } catch (e) {
+                                console.log('Response was not JSON, using raw text as message');
+                                errorData = { message: text };
+                            }
+                            
+                            // Create a safe error message
+                            let errorMessage = 'An error occurred';
+                            if (errorData.message) {
+                                errorMessage = String(errorData.message).replace(/[^\x00-\x7F]/g, '?');
+                            } else if (errorData.details) {
+                                errorMessage = String(errorData.details).replace(/[^\x00-\x7F]/g, '?');
+                            } else {
+                                errorMessage = `Server error: ${response.status} ${response.statusText}`;
+                            }
+                            
+                            console.error('Error response from server:', errorMessage);
+                            throw new Error(errorMessage);
+                            
+                        } catch (e) {
+                            console.error('Error processing error response:', e);
+                            throw new Error(`Server error: ${response.status} ${response.statusText}`);
+                        }
+                    }
+                    
+                    // Log response headers for debugging
+                    console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+                    
+                    const responseText = await response.text();
+                    console.log('Raw response text:', responseText);
+                    
+                    let result;
+                    try {
+                        result = JSON.parse(responseText);
+                        console.log('Successfully parsed JSON response:', result);
+                    } catch (e) {
+                        console.error('Failed to parse JSON response:', e);
+                        throw new Error(`Invalid JSON response: ${responseText.substring(0, 100)}...`);
+                    }
+                    
+                    if (!result) {
+                        throw new Error('Empty response from server');
+                    }
+                    
+                    if (!result.data) {
+                        console.warn('Response missing data field, using result directly');
+                        result.data = Array.isArray(result) ? result : [result];
+                    }
+                    
+                    console.log('Processing', result.data.length, 'alerts');
+                    
+                    if (Array.isArray(result.data) && result.data.length > 0) {
+                        console.log(`Found ${result.data.length} alerts`);
+                        
+                        // Clear existing alerts
+                        alerts.length = 0;
+                        
+                        // Process and validate alerts
+                        const validAlerts = result.data.map((alert, index) => {
+                            try {
+                                // Ensure required fields exist
+                                const processedAlert = {
+                                    ...alert,
+                                    id: alert.id || `alert-${Date.now()}-${index}`,
+                                    title: String(alert.title || 'No Title').substring(0, 100),
+                                    description: String(alert.description || 'No description provided'),
+                                    severity: String(alert.severity || 'medium').toLowerCase(),
+                                    created_at: alert.created_at || new Date().toISOString(),
+                                    reported_by: alert.reported_by || 'Anonymous',
+                                    // Ensure coordinates are valid numbers
+                                    latitude: (alert.latitude !== undefined && alert.latitude !== null) ? 
+                                        parseFloat(alert.latitude) : null,
+                                    longitude: (alert.longitude !== undefined && alert.longitude !== null) ? 
+                                        parseFloat(alert.longitude) : null
+                                };
+                                
+                                // Validate coordinates
+                                if (isNaN(processedAlert.latitude) || isNaN(processedAlert.longitude)) {
+                                    console.warn('Invalid coordinates for alert:', processedAlert);
+                                    processedAlert.latitude = null;
+                                    processedAlert.longitude = null;
+                                }
+                                
+                                console.log(`Alert ${index + 1}:`, {
+                                    id: processedAlert.id,
+                                    title: processedAlert.title,
+                                    hasLocation: !!(processedAlert.latitude && processedAlert.longitude)
+                                });
+                                
+                                return processedAlert;
+                            } catch (e) {
+                                console.error('Error processing alert:', alert, e);
+                                return null;
+                            }
+                        }).filter(alert => alert !== null); // Remove any null alerts from processing errors
+                        
+                        // Update global alerts array
+                        alerts.push(...validAlerts);
+                        console.log(`Added ${validAlerts.length} valid alerts`);
+                        
+                        // Update UI
+                        renderAlerts(validAlerts);
+                        
+                        // Update map markers if map is initialized
+                        if (map) {
+                            console.log('Updating map with', validAlerts.length, 'alerts');
+                            updateMapMarkers();
+                        } else {
+                            console.warn('Map not initialized, cannot update markers');
+                        }
+                    } else if (alertsContainer) {
+                        console.log('No alerts found in the response');
+                        alertsContainer.innerHTML = 
+                            '<div class="alert alert-info">No alerts found in your area</div>';
+                    }
+                } else {
+                    console.error('Invalid response format - missing data field:', result);
+                    throw new Error('Invalid response format from server');
+                }
+            } catch (fetchError) {
+                console.error('Error during fetch operation:', fetchError);
+                const errorMessage = fetchError.message || 'Failed to fetch alerts. Please try again later.';
+                showToast(errorMessage, 'danger');
+                
+                // Show error message in the alerts container
+                if (alertsContainer) {
+                    alertsContainer.innerHTML = `
+                        <div class="alert alert-danger">
+                            <strong>Error loading alerts:</strong> ${errorMessage}
+                            <button class="btn btn-sm btn-outline-secondary ms-2" onclick="loadAlerts()">
+                                <i class="fas fa-sync-alt"></i> Retry
+                            </button>
+                        </div>`;
+                }
+            } finally {
+                if (loadingEl) loadingEl.classList.add('d-none');
+            }
+        }
+
+        // Render alerts on the page
+        function renderAlerts(alerts) {
+            console.log('renderAlerts called with alerts:', alerts);
+            const container = document.getElementById('alerts-container');
+            
+            if (!container) {
+                const errorMsg = 'Alerts container not found in renderAlerts';
+                console.error(errorMsg);
+                showToast(errorMsg, 'danger');
+                return;
+            }
+            
+            // Debug container state
+            console.log('Container state before rendering:', {
+                id: container.id,
+                className: container.className,
+                isConnected: container.isConnected,
+                parentElement: container.parentElement ? container.parentElement.id : 'none'
+            });
+            
+            if (!alerts || !Array.isArray(alerts)) {
+                console.warn('Invalid alerts data:', alerts);
+                container.innerHTML = `
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle me-2"></i> 
+                        Invalid alert data received.
+                    </div>`;
+                return;
+            }
+            
+            if (alerts.length === 0) {
+                console.log('No alerts to render, showing empty state');
+                container.innerHTML = `
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i> 
+                        No alerts found in your area. Be the first to report an incident!
+                    </div>`;
+                return;
+            }
+
+            // Process and render alerts
+            try {
+                const alertsHtml = alerts.map(alert => {
+                    try {
+                        const title = String(alert.title || 'Untitled Alert').substring(0, 100);
+                        const description = String(alert.description || 'No description provided');
+                        const severity = String(alert.severity || 'medium').toLowerCase();
+                        const createdAt = alert.created_at ? new Date(alert.created_at) : new Date();
+                        const reportedBy = String(alert.reported_by || 'Anonymous');
+                        
+                        // Format date
+                        const formattedDate = createdAt.toLocaleString('en-US', {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                        });
+                        
+                        return `
+                        <div class="card mb-3 alert-card" data-alert-id="${alert.id || ''}">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <h5 class="card-title mb-2">${escapeHtml(title)}</h5>
+                                    <span class="badge bg-${getSeverityBadgeClass(severity)} ms-2">
+                                        <i class="fas ${getAlertIcon(severity)} me-1"></i>${severity}
+                                    </span>
+                                </div>
+                                <p class="card-text">${escapeHtml(description)}</p>
+                                <div class="d-flex justify-content-between align-items-center text-muted small">
+                                    <div>
+                                        <i class="fas fa-user me-1"></i> ${escapeHtml(reportedBy)}
+                                    </div>
+                                    <div>
+                                        <i class="far fa-clock me-1"></i> ${formattedDate}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>`;
+                    } catch (error) {
+                        console.error('Error rendering alert:', alert, error);
+                        return `
+                        <div class="card mb-3 border-danger">
+                            <div class="card-body text-danger">
+                                <i class="fas fa-exclamation-circle me-2"></i>
+                                Error displaying this alert
+                            </div>
+                        </div>`;
+                    }
+                }).join('');
+                
+                // Update the container with the alerts
+                container.innerHTML = alertsHtml;
+                console.log(`Rendered ${alerts.length} alerts`);
+                
+            } catch (error) {
+                console.error('Error in renderAlerts:', error);
+                container.innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        Error loading alerts. Please try again later.
+                    </div>`;
+            }
+            
+            console.log('Finished rendering alerts');
+        }
+
+        // Handle form submission
+        async function handleFormSubmit(e) {
+            e.preventDefault();
+            
+            const submitBtn = document.querySelector('#reportForm button[type="submit"]');
+            const spinner = document.getElementById('spinner');
+            
+            try {
+                if (!userLocation) {
+                    showToast('Please select a location on the map', 'warning');
+                    return;
+                }
+                
+                // Show loading state
+                if (submitBtn) submitBtn.disabled = true;
+                if (spinner) spinner.classList.remove('d-none');
+                
+                // Get form data
+                const title = document.getElementById('title')?.value || '';
+                const description = document.getElementById('description')?.value || '';
+                const severity = document.getElementById('severity')?.value || 'medium';
+                
+                if (!title || !description) {
+                    throw new Error('Please fill in all required fields');
+                }
+                
+                // Submit to API
+                const response = await fetch('/api/alerts', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        title,
+                        description,
+                        severity,
+                        latitude: userLocation.lat,
+                        longitude: userLocation.lng
+                    })
+                });
+                
+                if (!response.ok) {
+                    const error = await response.json().catch(() => ({}));
+                    throw new Error(error.message || 'Failed to report alert');
+                }
+                
+                const result = await response.json();
+                
+                if (result.status === 'success') {
+                    // Reset form
+                    const form = document.getElementById('reportForm');
+                    if (form) form.reset();
+                    
+                    // Reload alerts
+                    await loadAlerts();
+                    
+                    showToast('Alert reported successfully!', 'success');
+                } else {
+                    throw new Error(result.message || 'Failed to report alert');
+                }
+            } catch (error) {
+                console.error('Error reporting alert:', error);
+                showToast(error.message || 'Error reporting alert', 'danger');
+            } finally {
+                // Reset loading state
+                if (submitBtn) submitBtn.disabled = false;
+                if (spinner) spinner.classList.add('d-none');
+            }
+        }
+
+        function updateMapMarkers() {
+            console.log('Updating map markers with', alerts.length, 'alerts');
+            
+            // Clear existing markers
+            markers.forEach(marker => map.removeLayer(marker));
+            markers.length = 0;
+            
+            if (!map) {
+                console.error('Map not initialized');
+                return;
+            }
+            
+            // Add markers for each alert
+            alerts.forEach(alert => {
+                if (!alert.latitude || !alert.longitude) {
+                    console.warn('Alert missing coordinates:', alert);
+                    return;
+                }
+                
+                try {
+                    const severity = alert.severity || 'medium';
+                    const iconColor = getSeverityColor(severity);
+                    const iconHtml = `<i class="fas ${getAlertIcon(severity)}" style="color: ${iconColor}; font-size: 24px; text-shadow: 0 0 3px white;"></i>`;
+                    
+                    const marker = L.marker(
+                        [parseFloat(alert.latitude), parseFloat(alert.longitude)], 
+                        {
+                            icon: L.divIcon({
+                                className: 'alert-marker',
+                                html: iconHtml,
+                                iconSize: [30, 30],
+                                iconAnchor: [15, 30],
+                                popupAnchor: [0, -30]
+                            }),
+                            title: alert.title || 'Alert'
+                        }
+                    ).addTo(map);
+                    
+                    // Add popup with alert details
+                    const popupContent = `
+                        <div style="min-width: 200px;">
+                            <h6 class="mb-1">${alert.title || 'Untitled Alert'}</h6>
+                            <p class="mb-1">${alert.description || 'No description'}</p>
+                            <div class="small text-muted">
+                                <div><i class="fas fa-user me-1"></i> ${alert.reported_by || 'Anonymous'}</div>
+                                <div><i class="fas fa-clock me-1"></i> ${new Date(alert.created_at).toLocaleString()}</div>
+                                <div class="mt-1">
+                                    <span class="badge bg-${getSeverityBadgeClass(severity)}">
+                                        <i class="fas ${getAlertIcon(severity)} me-1"></i>${severity}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>`;
+                    
+                    marker.bindPopup(popupContent);
+                    
+                    // Store reference to marker
+                    markers.push(marker);
+                    
+                } catch (error) {
+                    console.error('Error creating marker for alert:', alert, error);
+                }
+            });
+            
+            // Fit map to show all markers if we have any
+            if (markers.length > 0) {
+                const group = new L.featureGroup(markers);
+                map.fitBounds(group.getBounds().pad(0.1));
+            }
+        }
+        
+        function getAlertIcon(severity) {
+            const icons = {
+                high: 'fa-exclamation-triangle',
+                medium: 'fa-exclamation-circle',
+                low: 'fa-info-circle'
+            };
+            return icons[severity] || 'fa-map-marker-alt';
+        }
+        
+        function getSeverityColor(severity) {
+            const colors = {
+                high: '#e74c3c',
+                medium: '#f39c12',
+                low: '#2ecc71'
+            };
+            return colors[severity] || '#3498db';
+        }
+        
+        function getSeverityBadgeClass(severity) {
+            const classes = {
+                high: 'danger',
+                medium: 'warning',
+                low: 'success'
+            };
+            return classes[severity] || 'secondary';
+        }
+
+        // Helper function to escape HTML to prevent XSS
+        function escapeHtml(unsafe) {
+            if (typeof unsafe !== 'string') return '';
+            return unsafe
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+        
+        // Helper function to get severity color
+        function getSeverityClass(severity) {
+            const classes = { high: 'danger', medium: 'warning', low: 'success' };
+            return classes[severity] || 'secondary';
+        }
+
+        function showToast(message, type) {
+            const toastContainer = document.querySelector('.toast-container') || document.createElement('div');
+            toastContainer.className = 'toast-container';
+            
+            const toast = document.createElement('div');
+            toast.className = `toast show`;
+            toast.role = 'alert';
+            toast.setAttribute('aria-live', 'assertive');
+            toast.setAttribute('aria-atomic', 'true');
+            
+            const toastHeader = document.createElement('div');
+            toastHeader.className = 'toast-header';
+            
+            const title = document.createElement('strong');
+            title.className = 'me-auto';
+            title.textContent = type.charAt(0).toUpperCase() + type.slice(1);
+            
+            const closeBtn = document.createElement('button');
+            closeBtn.type = 'button';
+            closeBtn.className = 'btn-close';
+            closeBtn.setAttribute('data-bs-dismiss', 'toast');
+            closeBtn.setAttribute('aria-label', 'Close');
+            
+            const toastBody = document.createElement('div');
+            toastBody.className = 'toast-body';
+            toastBody.textContent = message;
+            
+            toastHeader.appendChild(title);
+            toastHeader.appendChild(closeBtn);
+            toast.appendChild(toastHeader);
+            toast.appendChild(toastBody);
+            toastContainer.appendChild(toast);
+            
+            if (!document.querySelector('.toast-container')) {
+                document.body.appendChild(toastContainer);
+            }
+            
+            // Initialize Bootstrap toast
+            const bsToast = new bootstrap.Toast(toast);
+            bsToast.show();
+            
+            // Auto-remove after delay
+            setTimeout(() => {
+                bsToast.hide();
+                setTimeout(() => toast.remove(), 150);
+            }, 5000);
+        }
+
+        // Initialize the page when DOM is fully loaded
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOM fully loaded');
+            
+            // Initialize the map
+            initMap();
+            
+            // Load user's location and then alerts
+            getLocation().then(() => {
+                console.log('User location obtained, loading alerts...');
+                loadAlerts();
+            }).catch(error => {
+                console.warn('Could not get user location:', error);
+                // Load alerts anyway, even without location
+                loadAlerts();
+            });
+            
+            // Set up form submission
+            const reportForm = document.getElementById('reportForm');
+            if (reportForm) {
+                reportForm.addEventListener('submit', handleFormSubmit);
+            }
+            
+            // Set up toast close buttons
+            document.addEventListener('click', function(e) {
+                if (e.target.matches('.btn-close') || e.target.closest('.btn-close')) {
+                    const toast = e.target.closest('.toast');
+                    if (toast) {
+                        toast.remove();
+                    }
+                }
+            });
+        });
+    </script>
+</body>
+</html>

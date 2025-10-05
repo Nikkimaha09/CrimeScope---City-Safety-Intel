@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CrimeScope - Real-time Crime Dashboard</title>
+    
+    <!-- Favicon & Fonts -->
+    <link rel="icon" href="{{ url_for('static', filename='assets/favicon.ico') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css">
+
+    <!-- Libraries CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/map-controls.css') }}" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/map-styles.css') }}" />
+    <style>
+        /* Statistics Card Styles */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+        
+        .stat-card {
+            background: #f8f9fa;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            transition: all 0.2s ease;
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+        }
+        
+        .stat-icon {
+            width: 3rem;
+            height: 3rem;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 1.25rem;
+        }
+        
+        .stat-content h3 {
+            margin: 0;
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+        
+        .stat-content p {
+            margin: 0.25rem 0 0;
+            font-size: 0.85rem;
+        }
+        
+        /* Chart Styles */
+        #crime-types-chart {
+            max-height: 250px;
+            width: 100%;
+        }
+        
+        /* Loading State */
+        #chart-loading {
+            display: none;
+            width: 1.5rem;
+            height: 1.5rem;
+            border-width: 0.2em;
+        }
+        
+        /* No Data Message */
+        #no-data-message {
+            display: none;
+            text-align: center;
+            padding: 2rem 1rem;
+            color: #6c757d;
+        }
+        
+        #no-data-message i {
+            opacity: 0.6;
+            margin-bottom: 0.5rem;
+        }
+        
+        /* Debug styles */
+        #map {
+            border: 2px solid red !important;
+        }
+    </style>
+
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <header class="navbar">
+        <div class="navbar-brand"><i class="fas fa-shield-alt"></i> CrimeScope</div>
+        <div class="d-flex align-items-center">
+            <a href="/predictions" class="btn btn-outline-light me-2">
+                <i class="fas fa-fire"></i> Hot Zone Predictions
+            </a>
+            <a href="/alerts" class="btn btn-outline-light me-2">
+                <i class="fas fa-bell"></i> Alerts
+            </a>
+            <button id="report-crime-btn" class="btn btn-primary">
+                <i class="fas fa-plus-circle"></i> Report Crime
+            </button>
+        </div>
+    </header>
+
+    <div class="main-content">
+        <aside class="sidebar">
+            <!-- Statistics -->
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span>Crime Statistics</span>
+                    <small id="last-updated" class="text-muted">Loading...</small>
+                </div>
+                <div class="card-body">
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-icon bg-primary">
+                                <i class="fas fa-chart-bar"></i>
+                            </div>
+                            <div class="stat-content">
+                                <h3 id="total-crimes">0</h3>
+                                <p class="text-muted">Total Reports</p>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon bg-success">
+                                <i class="fas fa-calendar-day"></i>
+                            </div>
+                            <div class="stat-content">
+                                <h3 id="today-crimes">0</h3>
+                                <p class="text-muted">Today's Reports</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Filters -->
+            <div class="card">
+                <div class="card-header">Filters</div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label for="crimeTypeFilter" class="form-label">Crime Type</label>
+                        <select class="form-select" id="crimeTypeFilter">
+                            <option value="all">All Types</option>
+                            <option value="theft">Theft</option>
+                            <option value="assault">Assault</option>
+                            <option value="burglary">Burglary</option>
+                            <option value="vandalism">Vandalism</option>
+                            <option value="fraud">Fraud</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="dateRangeFilter" class="form-label">Date Range</label>
+                        <select class="form-select" id="dateRangeFilter">
+                            <option value="7">Last 7 Days</option>
+                            <option value="30">Last 30 Days</option>
+                            <option value="90">Last 90 Days</option>
+                            <option value="all">All Time</option>
+                        </select>
+                    </div>
+                    <button id="apply-filters-btn" class="btn btn-secondary w-100">Apply</button>
+                </div>
+            </div>
+
+
+            <!-- Charts -->
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span>Crime Distribution</span>
+                    <div class="spinner-border spinner-border-sm text-primary" id="chart-loading" style="display: none;" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+                <div class="card-body position-relative" style="height: 300px;">
+                    <canvas id="crime-types-chart"></canvas>
+                    <div id="no-data-message" class="text-center d-none" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);">
+                        <i class="fas fa-chart-pie fa-3x text-muted mb-2"></i>
+                        <p class="text-muted">No crime data available</p>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Map Container -->
+        <div class="map-container" style="flex: 1; position: relative; min-height: 600px; background: #f8f9fa;">
+            <div id="map" style="width: 100%; height: 100%; position: absolute; top: 0; left: 0;">
+                <div id="map-debug" style="position: absolute; top: 10px; left: 10px; background: rgba(255,255,255,0.9); padding: 5px 10px; border-radius: 4px; z-index: 1000; font-family: monospace; font-size: 12px; color: #d32f2f; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                    <i class="fas fa-spinner fa-spin"></i> Loading map...
+                </div>
+            </div>
+            <div class="map-controls" style="position: absolute; top: 10px; right: 10px; z-index: 1000; display: flex; flex-direction: column; gap: 5px;">
+                <button id="find-route" class="btn btn-primary btn-sm">
+                    <i class="fas fa-route"></i> Find Safest Route
+                </button>
+                <button id="clear-route" class="btn btn-outline-secondary btn-sm">
+                    <i class="fas fa-times"></i> Clear Route
+                </button>
+                <button id="heatmap-btn" class="btn btn-sm btn-secondary active"><i class="fas fa-fire"></i> Heatmap</button>
+                <button id="cluster-btn" class="btn btn-sm btn-secondary"><i class="fas fa-circle-nodes"></i> Clusters</button>
+                <button id="hotspot-btn" class="btn btn-sm btn-secondary"><i class="fas fa-bolt"></i> Hotspots</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Report Crime Modal -->
+    <div class="modal fade" id="reportModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Report a Crime</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="reportForm" onsubmit="return false;">
+                        <input type="hidden" id="latitude" name="latitude">
+                        <input type="hidden" id="longitude" name="longitude">
+                        
+                        <div class="mb-3">
+                            <label for="crimeType" class="form-label">Crime Type</label>
+                            <select class="form-select" id="crimeType" name="crimeType" required>
+                                <option value="theft">Theft</option>
+                                <option value="assault">Assault</option>
+                                <option value="burglary">Burglary</option>
+                                <option value="vandalism">Vandalism</option>
+                                <option value="fraud">Fraud</option>
+                            </select>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="location" class="form-label">Location</label>
+                            <input type="text" class="form-control" id="location" name="location" readonly required>
+                            <div class="form-text">Click on the map to set the location.</div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="description" class="form-label">Description</label>
+                            <textarea class="form-control" id="description" name="description" rows="3" required></textarea>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="severity" class="form-label">Severity: <span id="severity-value">3</span></label>
+                            <input type="range" id="severity" name="severity" class="form-range" min="1" max="5" value="3" required>
+                        </div>
+                        
+                        <button type="submit" class="btn btn-primary w-100" id="submit-report-btn">
+                            <span class="btn-text">Submit Report</span>
+                            <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- JS Libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+    <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
+    <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- Initialize the application -->
+    <script type="module">
+        // Add error handler for uncaught errors
+        window.addEventListener('error', function(event) {
+            console.error('Uncaught error:', event.error);
+        });
+
+        // Import the map module
+        import('/static/js/map.js')
+            .then(module => {
+                console.log('Map module loaded, initializing...');
+                window.crimeMap = new module.default();
+                
+                // Load dashboard after map is initialized
+                import('/static/js/dashboard.js')
+                    .then(dashboardModule => {
+                        if (dashboardModule && typeof dashboardModule.default === 'function') {
+                            dashboardModule.default();
+                        }
+                        console.log('Dashboard initialized');
+                    })
+                    .catch(err => console.error('Error loading dashboard:', err));
+                
+                console.log('Map initialized successfully');
+            })
+            .catch(error => {
+                console.error('Error initializing application:', error);
+                alert('Failed to load the application. Please check console for details.');
+            });
+    </script>
+
+    <div class="toast-container position-fixed bottom-0 end-0 p-3"></div>
+</body>
+</html>
