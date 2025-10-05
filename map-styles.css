@@ -1,0 +1,129 @@
+/* Map container */
+#map {
+    width: 100%;
+    height: 100%;
+    min-height: 500px;
+    position: relative;
+    z-index: 1;
+    background-color: #f8f9fa;
+}
+
+/* Crime markers */
+.crime-marker {
+    position: relative;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #fff;
+    border: 2px solid #fff;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    transform: translate(-50%, -50%);
+    transition: all 0.2s ease;
+}
+
+.crime-marker:hover {
+    transform: translate(-50%, -50%) scale(1.2);
+    z-index: 1000;
+}
+
+.crime-marker > div {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+}
+
+/* Popup styles */
+.crime-popup {
+    padding: 8px;
+}
+
+.crime-popup h6 {
+    margin: 0 0 8px 0;
+    color: #333;
+    font-weight: 600;
+}
+
+.crime-popup p {
+    margin: 0 0 8px 0;
+    color: #666;
+    font-size: 0.9em;
+}
+
+/* Cluster markers */
+.marker-cluster {
+    background-clip: padding-box;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: bold;
+    text-shadow: 0 1px 1px rgba(0,0,0,0.5);
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+}
+
+.marker-cluster > div {
+    width: 30px;
+    height: 30px;
+    margin-left: 5px;
+    margin-top: 5px;
+    text-align: center;
+    border-radius: 50%;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: rgba(255,255,255,0.2);
+}
+
+.marker-cluster-small {
+    width: 40px;
+    height: 40px;
+}
+
+.marker-cluster-medium {
+    width: 50px;
+    height: 50px;
+}
+
+.marker-cluster-large {
+    width: 60px;
+    height: 60px;
+}
+
+/* Map controls */
+.leaflet-control {
+    margin: 10px;
+}
+
+.leaflet-bar {
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2) !important;
+    border: none !important;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.leaflet-bar a {
+    width: 30px;
+    height: 30px;
+    line-height: 30px;
+    border-bottom: 1px solid #eee !important;
+}
+
+.leaflet-bar a:first-child {
+    border-top-left-radius: 4px !important;
+    border-top-right-radius: 4px !important;
+}
+
+.leaflet-bar a:last-child {
+    border-bottom-left-radius: 4px !important;
+    border-bottom-right-radius: 4px !important;
+    border-bottom: none !important;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    #map {
+        min-height: 300px;
+    }
+}

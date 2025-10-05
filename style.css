@@ -1,0 +1,663 @@
+:root {
+    --primary-color: #3498db;
+    --secondary-color: #2ecc71;
+    --danger-color: #e74c3c;
+    --warning-color: #f1c40f;
+    --light-color: #ecf0f1;
+    --dark-color: #2c3e50;
+    --background-color: #f4f6f9;
+    --card-bg: #ffffff;
+    --text-color: #34495e;
+    --border-radius: 8px;
+    --shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background-color: var(--body-bg);
+    color: #333;
+}
+
+/* Navbar */
+.navbar {
+    background: linear-gradient(135deg, var(--primary-color), var(--secondary-color)) !important;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.navbar-brand {
+    font-weight: 700;
+    font-size: 1.5rem;
+    letter-spacing: 0.5px;
+}
+
+/* Layout */
+body, html {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    font-family: 'Inter', sans-serif;
+    overflow: hidden;
+}
+
+.main-content {
+    display: flex;
+    height: calc(100vh - 56px); /* Subtract navbar height */
+    position: relative;
+    overflow: hidden;
+}
+
+.sidebar {
+    width: 320px;
+    padding: 1rem;
+    background: #f8f9fa;
+    overflow-y: auto;
+    border-right: 1px solid #dee2e6;
+}
+
+/* Map container and map styles */
+.map-container {
+    flex: 1;
+    position: relative;
+    height: calc(100vh - 56px); /* Full height minus navbar */
+    width: 100%;
+    min-width: 0; /* Fix for flexbox */
+    z-index: 1;
+    overflow: hidden;
+}
+
+#map {
+    position: absolute !important;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #f0f0f0;
+    width: 100% !important;
+    height: 100% !important;
+}
+
+/* Ensure map tiles are properly loaded */
+.leaflet-tile {
+    filter: none !important;
+    -webkit-filter: none !important;
+}
+
+/* Make sure map container is visible during loading */
+body.loading #map {
+    visibility: visible !important;
+}
+
+/* View toggle buttons */
+.view-toggle {
+    position: absolute;
+    bottom: 20px;
+    right: 20px;
+    z-index: 1000;
+    display: flex;
+    gap: 8px;
+}
+
+.view-toggle .btn {
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+}
+
+.view-toggle .btn.active {
+    background-color: var(--primary-color);
+    border-color: var(--primary-color);
+}
+
+/* Route Planning Controls */
+#start-point, #end-point {
+    background-color: #f8f9fa;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+#start-point:focus, #end-point:focus {
+    background-color: #fff;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 0.25rem rgba(52, 152, 219, 0.25);
+}
+
+#safety-level {
+    width: 100%;
+    margin: 10px 0;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    height: 8px;
+    border-radius: 4px;
+    background: #dee2e6;
+    outline: none;
+    padding: 0;
+}
+
+#safety-level::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--primary-color);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+#safety-level::-moz-range-thumb {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--primary-color);
+    cursor: pointer;
+    border: none;
+}
+
+#safety-level-text {
+    font-weight: 600;
+    color: var(--primary-color);
+}
+
+/* Map Container */
+#map {
+    width: 100%;
+    height: 100%;
+    min-height: 500px; /* Ensure minimum height */
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    
+    /* Custom scrollbar for map popup */
+    --scrollbar-width: 6px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--primary-color) #f1f1f1;
+}
+
+/* Custom marker styles */
+.marker-container {
+    position: relative;
+    width: 30px;
+    height: 30px;
+}
+
+.marker-pin {
+    position: absolute;
+    width: 30px;
+    height: 30px;
+    border-radius: 50% 50% 50% 0;
+    background: var(--primary-color);
+    transform: rotate(-45deg);
+    left: 50%;
+    top: 0;
+    margin: -15px 0 0 -15px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    z-index: 1;
+    transition: all 0.3s ease;
+}
+
+.marker-pin i {
+    transform: rotate(45deg);
+    font-size: 14px;
+    margin-top: 2px;
+    margin-left: 1px;
+}
+
+.pulse-ring {
+    content: '';
+    position: absolute;
+    width: 30px;
+    height: 30px;
+    background: transparent;
+    border: 2px solid var(--primary-color);
+    border-radius: 60px;
+    animation: pulsate 2s ease-out;
+    animation-iteration-count: infinite;
+    opacity: 0;
+    top: 0;
+    left: 0;
+    margin: 0;
+}
+
+.marker-hover .pulse-ring {
+    animation: pulsate-hover 1.5s ease-out;
+    animation-iteration-count: infinite;
+    opacity: 1;
+}
+
+@keyframes pulsate {
+    0% {transform: scale(0.8); opacity: 0.0;}
+    50% {opacity: 0.3;}
+    100% {transform: scale(1.2); opacity: 0.0;}
+}
+
+@keyframes pulsate-hover {
+    0% {transform: scale(0.8); opacity: 0.5;}
+    100% {transform: scale(1.8); opacity: 0.0;}
+}
+
+/* Popup styles */
+.leaflet-popup-content-wrapper {
+    border-radius: 8px;
+    padding: 0;
+    overflow: hidden;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.leaflet-popup-content {
+    margin: 0;
+    width: 250px !important;
+}
+
+.crime-popup {
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.popup-header {
+    padding: 12px 15px;
+    background: #f8f9fa;
+    border-bottom: 1px solid #eee;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.popup-header h6 {
+    margin: 0;
+    font-weight: 600;
+    color: #333;
+}
+
+.popup-body {
+    padding: 12px 15px;
+}
+
+.popup-body p {
+    margin-bottom: 8px;
+}
+
+.popup-body i {
+    width: 16px;
+    text-align: center;
+    color: #6c757d;
+}
+
+/* Status badges */
+.badge {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 8px;
+    border-radius: 12px;
+    text-transform: capitalize;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .leaflet-popup-content {
+        width: 220px !important;
+    }
+    
+    .popup-header, .popup-body {
+        padding: 10px 12px;
+    }
+}
+    transition: all 0.3s ease;
+    background-color: #f0f0f0; /* Light gray background */
+    position: relative;
+}
+
+/* Debug overlay */
+#map::after {
+    content: 'Map Container';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: #999;
+    font-size: 18px;
+    pointer-events: none;
+}
+
+/* Stats Cards */
+.stats-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.stat-card {
+    background: var(--card-bg);
+    border-radius: 12px;
+    padding: 1.25rem;
+    text-align: center;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    border-left: 4px solid var(--primary-color);
+}
+
+.stat-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 6px 15px rgba(0, 0, 0, 0.1);
+}
+
+.stat-card h3 {
+    font-size: 1.75rem;
+    margin: 0.5rem 0;
+    color: var(--dark-color);
+    font-weight: 700;
+}
+
+.stat-card p {
+    color: #6c757d;
+    margin: 0;
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Crime Type Badges */
+.crime-badge {
+    display: inline-block;
+    padding: 0.35rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    margin: 0.2rem;
+    color: white;
+    text-transform: capitalize;
+}
+
+.badge-theft { background-color: #ef476f; }
+.badge-assault { background-color: #ffd166; color: #333; }
+.badge-burglary { background-color: #06d6a0; }
+.badge-fraud { background-color: #7209b7; }
+.badge-vandalism { background-color: #f8961e; }
+
+/* Modal Styling */
+.modal-content {
+    border: none;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+}
+
+.modal-header {
+    background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+    color: white;
+    border: none;
+}
+
+.modal-title {
+    font-weight: 600;
+}
+
+/* Form Styling */
+.form-control, .form-select {
+    padding: 0.75rem 1rem;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    transition: all 0.3s ease;
+}
+
+.form-control:focus, .form-select:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 0.25rem rgba(67, 97, 238, 0.25);
+}
+
+/* Buttons */
+.btn {
+    padding: 0.65rem 1.5rem;
+    border-radius: 8px;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    text-transform: uppercase;
+}
+
+/* Crime Marker Styles */
+.crime-marker {
+    position: relative;
+    transition: transform 0.3s ease;
+}
+
+.crime-marker-container {
+    position: relative;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    background: white;
+    border-radius: 50%;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+    transform: translate(-50%, -50%);
+}
+
+.crime-marker .pulse-effect {
+    position: absolute;
+    width: 40px;
+    height: 40px;
+    background: currentColor;
+    border-radius: 50%;
+    opacity: 0.6;
+    transform: scale(0);
+    animation: pulse 2s infinite;
+}
+
+.new-crime .pulse-effect {
+    animation: pulse 1s 3;
+}
+
+@keyframes pulse {
+    0% {
+        transform: scale(0.8);
+        opacity: 0.8;
+    }
+    100% {
+        transform: scale(2);
+        opacity: 0;
+    }
+}
+
+/* Enhanced Popup Styles */
+.leaflet-popup-content-wrapper {
+    border-radius: 12px !important;
+    padding: 0 !important;
+    overflow: hidden;
+    box-shadow: 0 5px 20px rgba(0,0,0,0.2) !important;
+    border: none !important;
+}
+
+.leaflet-popup-content {
+    margin: 0 !important;
+    width: 280px !important;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+.crime-popup {
+    background: white;
+}
+
+.crime-popup-header {
+    padding: 15px;
+    background: linear-gradient(135deg, #3498db, #2ecc71);
+    color: white;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.crime-popup-header h4 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: white;
+}
+
+.severity-badge {
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    background: rgba(255,255,255,0.2);
+    backdrop-filter: blur(5px);
+}
+
+.severity-badge.low { background: rgba(46, 204, 113, 0.9); }
+.severity-badge.medium { background: rgba(241, 196, 15, 0.9); color: #333; }
+.severity-badge.high { background: rgba(231, 76, 60, 0.9); }
+.severity-badge.critical { background: rgba(142, 68, 173, 0.9); }
+
+.crime-popup-body {
+    padding: 15px;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.crime-popup-body p {
+    margin: 0 0 10px;
+    color: #333;
+    line-height: 1.5;
+    font-size: 14px;
+}
+
+.crime-popup-body .location {
+    color: #7f8c8d;
+    font-size: 13px;
+    margin-top: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.crime-popup-footer {
+    padding: 10px 15px;
+    background: #f8f9fa;
+    font-size: 12px;
+    color: #7f8c8d;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.crime-popup-footer i {
+    width: 14px;
+    text-align: center;
+    margin-right: 5px;
+    color: #95a5a6;
+}
+
+/* Animation for new crimes */
+@keyframes bounce {
+    0%, 100% { transform: translateY(0) scale(1); }
+    50% { transform: translateY(-10px) scale(1.1); }
+}
+
+.new-crime {
+    animation: bounce 0.6s ease 3;
+    z-index: 1000 !important;
+}
+
+/* Make sure marker appears above other layers */
+.leaflet-marker-icon {
+    z-index: 100;
+}
+
+.leaflet-marker-pane {
+    z-index: 600;
+}
+
+/* Ensure popup appears above markers */
+.leaflet-popup-pane {
+    z-index: 700;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .leaflet-popup-content {
+        width: 240px !important;
+    }
+    
+    .crime-popup-header, 
+    .crime-popup-body,
+    .crime-popup-footer {
+        padding: 12px;
+    }
+    
+    .crime-popup-header h4 {
+        font-size: 15px;
+    }
+}
+    letter-spacing: 0.5px;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+    border: none;
+}
+
+.btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(67, 97, 238, 0.3);
+}
+
+/* Animations */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+    animation: fadeIn 0.5s ease-out forwards;
+}
+
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+    .main-content {
+        flex-direction: column;
+    }
+    
+    .sidebar {
+        width: 100%;
+        height: auto;
+        max-height: 40vh;
+        overflow-y: auto;
+    }
+    
+    .map-container {
+        height: 60vh;
+    }
+    
+    #map {
+        height: 100%;
+        margin-bottom: 1.5rem;
+    }
+    
+    .stats-container {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--primary-color);
+    border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--secondary-color);
+}
